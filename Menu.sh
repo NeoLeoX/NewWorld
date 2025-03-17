@@ -12,7 +12,7 @@ install_global_command() {
     echo -e "${CYAN}正在安装全局命令...${RESET}"
 
     # 下载脚本到 /usr/local/bin
-    curl -L -s https://raw.githubusercontent.com/NeoLeoX/NewWorld/refs/heads/main/Menu.sh"/usr/local/bin/menu.sh"
+    curl -L -s https://raw.githubusercontent.com/NeoLeoX/NewWorld/refs/heads/main/Menu.sh -o /usr/local/bin/menu.sh
     chmod +x "/usr/local/bin/menu.sh"
 
     # 创建软链接
