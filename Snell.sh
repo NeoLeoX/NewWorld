@@ -33,8 +33,8 @@ check_bc() {
 # 定义系统路径
 INSTALL_DIR="/usr/local/bin"
 SYSTEMD_DIR="/etc/systemd/system"
-SNELL_CONF_DIR="/etc/users/snell"
-SNELL_CONF_FILE="${SNELL_CONF_DIR}/snell-main.conf"
+SNELL_CONF_DIR="/etc/snell"
+SNELL_CONF_FILE="${SNELL_CONF_DIR}/users/snell-main.conf"
 SYSTEMD_SERVICE_FILE="${SYSTEMD_DIR}/snell.service"
 
 # 旧的配置文件路径（用于兼容性检查）
