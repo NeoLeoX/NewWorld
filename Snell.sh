@@ -11,7 +11,7 @@ CYAN='\033[0;36m'
 RESET='\033[0m'
 
 #当前版本号
-current_version="1.0"
+current_version="3.0"
 
 # 检查 bc 是否安装
 check_bc() {
