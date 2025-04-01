@@ -786,10 +786,10 @@ update_script() {
     # 下载最新版本
     if curl -sL https://raw.githubusercontent.com/NeoLeoX/NewWorld/refs/heads/main/Snell.sh -o "$TMP_SCRIPT"; then
         # 获取新版本号
-        new_version=$(grep "current_version=" "$TMP_SCRIPT" | cut -d'"' -f2)
+        new_version=$(grep '^current_version="' "$TMP_SCRIPT" | head -n 1 | cut -d'"' -f2)
         
         if [ -z "$new_version" ]; then
-            echo -e "${RED}无法获取新版本信息${RESET}"
+            echo -e "${RED}无法从远程脚本中解析版本号，请检查脚本内容或网络连接${RESET}"
             rm -f "$TMP_SCRIPT"
             return 1
         fi
@@ -827,6 +827,7 @@ update_script() {
     else
         echo -e "${RED}下载新版本失败，请检查网络连接${RESET}"
         rm -f "$TMP_SCRIPT"
+        return 1
     fi
 }
 
