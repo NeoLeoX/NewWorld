@@ -37,8 +37,8 @@ SNELL_CONF_DIR="/etc/snell"
 SNELL_CONF_FILE="${SNELL_CONF_DIR}/users/snell-main.conf"
 SYSTEMD_SERVICE_FILE="${SYSTEMD_DIR}/snell.service"
 
-# 自动更新脚本
-auto_update_script() {
+# 更新脚本
+update_script() {
     echo -e "${CYAN}正在检查脚本更新...${RESET}"
     
     # 创建临时文件
@@ -47,33 +47,48 @@ auto_update_script() {
     # 下载最新版本
     if curl -sL https://raw.githubusercontent.com/NeoLeoX/NewWorld/refs/heads/main/Snell.sh -o "$TMP_SCRIPT"; then
         # 获取新版本号
-        new_version=$(grep "current_version=" "$TMP_SCRIPT" | cut -d'"' -f2)
+        new_version=$(grep "current_version=" "$TMP_SCRIPT" | grep -oP '(?<=current_version=")[^"]*' || echo "unknown")
+        
+        if [ -z "$new_version" ] || [ "$new_version" = "unknown" ]; then
+            echo -e "${RED}无法从远程脚本中解析版本号，请检查脚本内容或网络连接${RESET}"
+            rm -f "$TMP_SCRIPT"
+            return 1
+        fi
+        
+        echo -e "${YELLOW}当前版本：${current_version}${RESET}"
+        echo -e "${YELLOW}最新版本：${new_version}${RESET}"
         
         # 比较版本号
         if [ "$new_version" != "$current_version" ]; then
-            echo -e "${GREEN}发现新版本：${new_version}${RESET}"
-            echo -e "${YELLOW}当前版本：${current_version}${RESET}"
-            
-            # 备份当前脚本
-            cp "$0" "${0}.backup"
-            
-            # 更新脚本
-            mv "$TMP_SCRIPT" "$0"
-            chmod +x "$0"
-            
-            echo -e "${GREEN}脚本已更新到最新版本${RESET}"
-            echo -e "${YELLOW}已备份原脚本到：${0}.backup${RESET}"
-            
-            # 提示用户重新运行脚本
-            echo -e "${CYAN}请重新运行脚本以使用新版本${RESET}"
-            exit 0
+            echo -e "${CYAN}是否更新到新版本？[y/N]${RESET}"
+            read -r choice
+            if [[ "$choice" == "y" || "$choice" == "Y" ]]; then
+                # 获取当前脚本的完整路径
+                SCRIPT_PATH=$(readlink -f "$0")
+                
+                # 备份当前脚本
+                cp "$SCRIPT_PATH" "${SCRIPT_PATH}.backup"
+                
+                # 更新脚本
+                mv "$TMP_SCRIPT" "$SCRIPT_PATH"
+                chmod +x "$SCRIPT_PATH"
+                
+                echo -e "${GREEN}脚本已更新到最新版本${RESET}"
+                echo -e "${YELLOW}已备份原脚本到：${SCRIPT_PATH}.backup${RESET}"
+                echo -e "${CYAN}请重新运行脚本以使用新版本${RESET}"
+                exit 0
+            else
+                echo -e "${YELLOW}已取消更新${RESET}"
+                rm -f "$TMP_SCRIPT"
+            fi
         else
-            echo -e "${GREEN}当前已是最新版本 (${current_version})${RESET}"
+            echo -e "${GREEN}当前已是最新版本${RESET}"
             rm -f "$TMP_SCRIPT"
         fi
     else
-        echo -e "${RED}检查更新失败，请检查网络连接${RESET}"
+        echo -e "${RED}下载新版本失败，请检查网络连接${RESET}"
         rm -f "$TMP_SCRIPT"
+        return 1
     fi
 }
 
