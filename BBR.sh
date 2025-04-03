@@ -86,8 +86,12 @@ install_xanmod_bbr() {
         return 1
     fi
     
+    # 安装 gnupg
+    apt update -y
+    apt install -y gnupg
+    
     # 注册PGP密钥
-    wget -qO - https://dl.xanmod.org/archive.key | sudo gpg --dearmor -vo /etc/apt/keyrings/xanmod-archive-keyring.gpg --yes
+    wget -qO - https://dl.xanmod.org/archive.key | sudo gpg --dearmor -o /etc/apt/keyrings/xanmod-archive-keyring.gpg
     
     # 添加存储库
     echo 'deb [signed-by=/etc/apt/keyrings/xanmod-archive-keyring.gpg] http://deb.xanmod.org releases main' | sudo tee /etc/apt/sources.list.d/xanmod-release.list
