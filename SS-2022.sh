@@ -974,13 +974,13 @@ install_shadowtls() {
         return 1
     fi
     
-    chmod +x shadowtls.sh
+    chmod +x ShadowTLS.sh
     
     echo -e "${Info} 开始安装 ShadowTLS..."
     
-    bash shadowtls.sh
+    bash ShadowTLS.sh
     
-    rm -f shadowtls.sh
+    rm -f ShadowTLS.sh
     
     Before_Start_Menu
 }
