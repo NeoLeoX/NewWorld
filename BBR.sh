@@ -168,7 +168,7 @@ verify_bbr_status() {
     if lsmod | grep -q "^tcp_bbr" && sysctl net.ipv4.tcp_congestion_control | grep -q "bbr"; then
         echo -e "${GREEN}BBR 正在正常运行${RESET}"
     elif uname -r | grep -q "xanmod" && ! lsmod | grep -q "^tcp_bbr"; then
-        echo -e "${YELLOW}检测到 XanMod 内核，但 BBR 模块未加载。可能是内核内置 BBR 支持，请确认配置或尝试重启系统以生效。${RESET}"
+        echo -e "${YELLOW}检测到 XanMod 内核，但 BBR 模块未加载。可能是内核内置 BBR 支持。${RESET}"
     else
         echo -e "${YELLOW}BBR 未正常运行，请检查配置或重启系统${RESET}"
     fi
