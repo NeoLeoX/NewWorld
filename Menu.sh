@@ -1,5 +1,7 @@
 #!/bin/bash
 
+# 描述: 用于统一管理 Snell、SS-2022、ShadowTLS 和 BBR
+
 # 定义颜色代码
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -215,6 +217,25 @@ check_and_show_status() {
         echo -e "${YELLOW}ShadowTLS 未安装${RESET}"
     fi
 
+    # 检查 BBR 状态
+    local bbr_status=""
+    local sysctl_bbr=$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null)
+    local kernel_version=$(uname -r)
+
+    if [[ "$kernel_version" =~ "xanmod" ]]; then
+        bbr_status="XanMod 内核"
+    elif [[ "$sysctl_bbr" == "bbr" ]]; then
+        bbr_status="启用 BBR"
+    else
+        bbr_status="未启用 BBR"
+    fi
+
+    if [[ -n "$bbr_status" ]]; then
+        echo -e "${GREEN}BBR 状态${RESET}  ${YELLOW}${bbr_status}${RESET}"
+    else
+        echo -e "${YELLOW}无法检测 BBR 状态${RESET}"
+    fi
+
     echo -e "${CYAN}====================${RESET}\n"
 }
 
@@ -231,6 +252,11 @@ manage_ss_rust() {
 # 安装/管理 ShadowTLS
 manage_shadowtls() {
     bash <(curl -sL https://raw.githubusercontent.com/NeoLeoX/NewWorld/refs/heads/main/ShadowTLS.sh)
+}
+
+# 安装/管理 BBR
+manage_bbr() {
+    bash <(curl -sL https://raw.githubusercontent.com/NeoLeoX/NewWorld/refs/heads/main/BBR.sh)
 }
 
 # 卸载 Snell
@@ -324,11 +350,12 @@ show_menu() {
     echo -e "${GREEN}1.${RESET} Snell 安装管理"
     echo -e "${GREEN}2.${RESET} SS-2022 安装管理"
     echo -e "${GREEN}3.${RESET} ShadowTLS 安装管理"
+    echo -e "${GREEN}4.${RESET} BBR 安装管理"
 
     echo -e "\n${YELLOW}=== 卸载功能 ===${RESET}"
-    echo -e "${GREEN}4.${RESET} 卸载 Snell"
-    echo -e "${GREEN}5.${RESET} 卸载 SS-2022"
-    echo -e "${GREEN}6.${RESET} 卸载 ShadowTLS"
+    echo -e "${GREEN}5.${RESET} 卸载 Snell"
+    echo -e "${GREEN}6.${RESET} 卸载 SS-2022"
+    echo -e "${GREEN}7.${RESET} 卸载 ShadowTLS"
 
     echo -e "\n${YELLOW}=== 系统功能 ===${RESET}"
     echo -e "${GREEN}0.${RESET} 退出"
@@ -338,7 +365,7 @@ show_menu() {
     echo -e "${GREEN}退出脚本后，输入menu可进入脚本${RESET}"
 
     echo -e "${CYAN}============================================${RESET}"
-    read -rp "请输入选项 [0-6]: " num
+    read -rp "请输入选项 [0-7]: " num
 }
 
 # 初始检查
@@ -360,12 +387,15 @@ while true; do
             manage_shadowtls
             ;;
         4)
-            uninstall_snell
+            manage_bbr
             ;;
         5)
-            uninstall_ss_rust
+            uninstall_snell
             ;;
         6)
+            uninstall_ss_rust
+            ;;
+        7)
             uninstall_shadowtls
             ;;
         0)
@@ -373,7 +403,7 @@ while true; do
             exit 0
             ;;
         *)
-            echo -e "${RED}请输入正确的选项 [0-6]${RESET}"
+            echo -e "${RED}请输入正确的选项 [0-7]${RESET}"
             ;;
     esac
     echo -e "\n${CYAN}按任意键返回主菜单...${RESET}"
