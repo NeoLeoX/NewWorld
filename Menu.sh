@@ -1,6 +1,6 @@
 #!/bin/bash
 # =========================================
-# 描述: 用于统一管理 BBR、Snell、SS-2022 和 ShadowTLS
+# 描述: 用于统一管理 BBR、Snell、ss-2022 和 ShadowTLS
 # =========================================
 
 # 定义颜色代码
@@ -138,7 +138,7 @@ check_and_show_status() {
         echo -e "${YELLOW}Snell 未安装${RESET}"
     fi
 
-    # 检查 SS-2022 状态
+    # 检查 ss-2022 状态
     if [[ -e "/usr/local/bin/ss-rust" ]]; then
         local ss_memory=0
         local ss_cpu=0
@@ -152,9 +152,9 @@ check_and_show_status() {
             fi
         fi
         local ss_memory_mb=$(echo "scale=2; $ss_memory/1024" | bc)
-        printf "${GREEN}SS-2022 已安装${RESET}  ${YELLOW}CPU：%.2f%% (每核)${RESET}  ${YELLOW}内存：%.2f MB${RESET}  ${GREEN}运行中：${ss_running}/1${RESET}\n" "$ss_cpu" "$ss_memory_mb"
+        printf "${GREEN}ss-2022 已安装${RESET}  ${YELLOW}CPU：%.2f%% (每核)${RESET}  ${YELLOW}内存：%.2f MB${RESET}  ${GREEN}运行中：${ss_running}/1${RESET}\n" "$ss_cpu" "$ss_memory_mb"
     else
-        echo -e "${YELLOW}SS-2022 未安装${RESET}"
+        echo -e "${YELLOW}ss-2022 未安装${RESET}"
     fi
 
     # 检查 ShadowTLS 状态
@@ -210,9 +210,9 @@ manage_snell() {
     bash <(curl -sL https://raw.githubusercontent.com/NeoLeoX/NewWorld/refs/heads/main/Snell.sh)
 }
 
-# 安装/管理 SS-2022
+# 安装/管理 ss-2022
 manage_ss_rust() {
-    bash <(curl -sL https://raw.githubusercontent.com/NeoLeoX/NewWorld/refs/heads/main/SS-2022.sh)
+    bash <(curl -sL https://raw.githubusercontent.com/NeoLeoX/NewWorld/refs/heads/main/ss-2022.sh)
 }
 
 # 安装/管理 ShadowTLS
@@ -252,16 +252,16 @@ uninstall_snell() {
     echo -e "${GREEN}Snell 及其所有多用户配置已成功卸载${RESET}"
 }
 
-# 卸载 SS-2022
+# 卸载 ss-2022
 uninstall_ss_rust() {
-    echo -e "${CYAN}正在卸载 SS-2022...${RESET}"
+    echo -e "${CYAN}正在卸载 ss-2022...${RESET}"
     systemctl stop ss-rust 2>/dev/null
     systemctl disable ss-rust 2>/dev/null
     rm -f "/etc/systemd/system/ss-rust.service"
     rm -f "/usr/local/bin/ss-rust"
     rm -rf "/etc/ss-rust"
     systemctl daemon-reload
-    echo -e "${GREEN}SS-2022 卸载完成！${RESET}"
+    echo -e "${GREEN}ss-2022 卸载完成！${RESET}"
 }
 
 # 卸载 ShadowTLS
@@ -287,11 +287,11 @@ show_menu() {
     echo -e "${YELLOW}=== 安装管理 ===${RESET}"
     echo -e "${GREEN}1.${RESET} BBR 安装管理"      # BBR 调整到第1位
     echo -e "${GREEN}2.${RESET} Snell 安装管理"    # 原1变为2
-    echo -e "${GREEN}3.${RESET} SS-2022 安装管理"  # 原2变为3
+    echo -e "${GREEN}3.${RESET} ss-2022 安装管理"  # 原2变为3
     echo -e "${GREEN}4.${RESET} ShadowTLS 安装管理" # 原3变为4
     echo -e "\n${YELLOW}=== 卸载功能 ===${RESET}"
     echo -e "${GREEN}5.${RESET} 卸载 Snell"
-    echo -e "${GREEN}6.${RESET} 卸载 SS-2022"
+    echo -e "${GREEN}6.${RESET} 卸载 ss-2022"
     echo -e "${GREEN}7.${RESET} 卸载 ShadowTLS"
     echo -e "\n${YELLOW}=== 系统功能 ===${RESET}"
     echo -e "${GREEN}0.${RESET} 退出"
