@@ -672,7 +672,7 @@ Install() {
     install_service
 
     echo -e "${Info} 创建命令快捷方式..."
-    curl -L -s https://raw.githubusercontent.com/NeoLeoX/NewWorld/refs/heads/main/SS-2022.sh -o "/usr/local/bin/ss-2022.sh"
+    curl -L -s https://raw.githubusercontent.com/NeoLeoX/NewWorld/refs/heads/main/ss-2022.sh -o "/usr/local/bin/ss-2022.sh"
     chmod +x "/usr/local/bin/ss-2022.sh"
     if [ -f "/usr/local/bin/ssrust" ]; then
         rm -f "/usr/local/bin/ssrust"
@@ -920,7 +920,7 @@ Update_Shell() {
     echo -e "${Info} 开始检测脚本更新..."
     
     local temp_file="/tmp/ss-2022.sh"
-    if ! wget --no-check-certificate -O ${temp_file} "https://raw.githubusercontent.com/NeoLeoX/NewWorld/refs/heads/main/SS-2022.sh"; then
+    if ! wget --no-check-certificate -O ${temp_file} "https://raw.githubusercontent.com/NeoLeoX/NewWorld/refs/heads/main/ss-2022.sh"; then
         echo -e "${Error} 下载最新脚本失败！"
         rm -f ${temp_file}
         return 1
