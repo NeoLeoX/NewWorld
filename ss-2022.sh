@@ -1,5 +1,3 @@
-
-
 #!/usr/bin/env bash
 set -e
 
@@ -506,14 +504,14 @@ set_method() {
 ==================================
  ${Tip} AEAD 2022 加密（使用随机加密）
 ==================================	
- ${Green_font_prefix}13.${Font_color_suffix} 2022-blake3-aes-128-gcm ${Green_font_prefix}(默认)${Font_color_suffix}
- ${Green_font_prefix}14.${Font_color_suffix} 2022-blake3-aes-256-gcm ${Green_font_prefix}(推荐)${Font_color_suffix}
+ ${Green_font_prefix}13.${Font_color_suffix} 2022-blake3-aes-128-gcm
+ ${Green_font_prefix}14.${Font_color_suffix} 2022-blake3-aes-256-gcm ${Green_font_prefix}(默认)${Font_color_suffix}
  ${Green_font_prefix}15.${Font_color_suffix} 2022-blake3-chacha20-poly1305
  ${Green_font_prefix}16.${Font_color_suffix} 2022-blake3-chacha8-poly1305
 =================================="
     
-    read -e -p "(默认: 13. 2022-blake3-aes-128-gcm)：" method_choice
-    [[ -z "${method_choice}" ]] && method_choice="13"
+    read -e -p "(默认: 14. 2022-blake3-aes-256-gcm)：" method_choice
+    [[ -z "${method_choice}" ]] && method_choice="14"
     
     case ${method_choice} in
         1) SS_METHOD="aes-128-gcm" ;;
@@ -532,7 +530,7 @@ set_method() {
         14) SS_METHOD="2022-blake3-aes-256-gcm" ;;
         15) SS_METHOD="2022-blake3-chacha20-poly1305" ;;
         16) SS_METHOD="2022-blake3-chacha8-poly1305" ;;
-        *) SS_METHOD="2022-blake3-aes-128-gcm" ;;
+        *) SS_METHOD="2022-blake3-aes-256-gcm" ;;
     esac
     
     echo && echo "=================================="
@@ -541,7 +539,7 @@ set_method() {
 }
 
 set_tfo() {
-    echo -e "是否启用 T  TFO ？
+    echo -e "是否启用 TCP Fast Open？
 ==================================
  ${Green_font_prefix}1.${Font_color_suffix} 启用
  ${Green_font_prefix}2.${Font_color_suffix} 禁用
@@ -1029,7 +1027,7 @@ Start_Menu() {
     echo -e "${GREEN}          SS - 2022 管理脚本 ${RESET}"
     echo -e "${GREEN}============================================${RESET}"
         echo && echo -e "  
- ${Green_font_prefix}0.${Font_color_suffix} 更新脚本
+ ${Green_font_prefix}0.${Font_color_suffix} 退出脚本
 ——————————————————————————————————
  ${Green_font_prefix}1.${Font_color_suffix} 安装 Shadowsocks Rust
  ${Green_font_prefix}2.${Font_color_suffix} 更新 Shadowsocks Rust
@@ -1044,7 +1042,7 @@ Start_Menu() {
  ${Green_font_prefix}9.${Font_color_suffix} 查看 运行状态
 ——————————————————————————————————
  ${Green_font_prefix}10.${Font_color_suffix} 安装 ShadowTLS
- ${Green_font_prefix}11.${Font_color_suffix} 退出脚本
+ ${Green_font_prefix}11.${Font_color_suffix} 更新脚本
 ——————————————————————————————————
 ==================================" && echo
         if [[ -e ${BINARY_PATH} ]]; then
@@ -1058,10 +1056,11 @@ Start_Menu() {
             echo -e " 当前状态：${Red_font_prefix}未安装${Font_color_suffix}"
         fi
         echo
-        read -e -p " 请输入数字 [0-10]：" num
+        read -e -p " 请输入数字 [0-11]：" num
         case "$num" in
             0)
-                Update_Shell
+                echo -e "${Info} 退出脚本..."
+                exit 0
                 ;;
             1)
                 Install
@@ -1099,11 +1098,10 @@ Start_Menu() {
                 install_shadowtls
                 ;;
             11)
-                echo -e "${Info} 退出脚本..."
-                exit 0
+                Update_Shell
                 ;;
             *)
-                echo -e "${Error} 请输入正确数字 [0-10]"
+                echo -e "${Error} 请输入正确数字 [0-11]"
                 sleep 2
                 ;;
         esac
