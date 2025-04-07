@@ -51,7 +51,7 @@ EOF
     sysctl -p >/dev/null 2>&1
 
     if lsmod | grep -q tcp_bbr && sysctl net.ipv4.tcp_congestion_control | grep -q bbr; then
-        echo -e "${GREEN}BBR 和系统参数已成功配置。${ [removed]${RESET}"
+        echo -e "${GREEN}BBR 和系统参数已成功配置。${RESET}"
     else
         echo -e "${YELLOW}BBR 或系统参数配置可能需要重启系统才能生效。${RESET}"
     fi
