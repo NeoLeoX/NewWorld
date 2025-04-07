@@ -945,28 +945,45 @@ Update_Shell() {
         read -p "(默认: y)：" yn
         [[ -z "${yn}" ]] && yn="y"
         if [[ ${yn} == [Yy] ]]; then
-            # 检查 SCRIPT_PATH 是否有效
-            if [[ "${SCRIPT_PATH}" =~ ^/dev/fd/ || ! -d "${SCRIPT_PATH}" ]]; then
-                echo -e "${Warning} 检测到无效的脚本路径，使用默认路径 /usr/local/bin"
-                SCRIPT_PATH="/usr/local/bin"
-                SCRIPT_NAME="ss-2022.sh"
+            # 检测脚本的实际安装路径
+            local target_script=""
+            if [[ "$0" =~ ^/dev/fd/ ]]; then
+                # 通过 curl 运行，检查已安装的脚本位置
+                if [[ -f "/usr/local/bin/ss-2022.sh" ]]; then
+                    target_script="/usr/local/bin/ss-2022.sh"
+                elif [[ -f "/usr/local/bin/ssrust" && -L "/usr/local/bin/ssrust" ]]; then
+                    target_script=$(readlink -f "/usr/local/bin/ssrust")
+                else
+                    echo -e "${Error} 检测到脚本通过 curl 运行，但未找到已安装的脚本！"
+                    echo -e "${Info} 请先安装脚本到本地，例如："
+                    echo -e "  1. 下载脚本：wget -O /usr/local/bin/ss-2022.sh https://raw.githubusercontent.com/NeoLeoX/NewWorld/refs/heads/main/ss-2022.sh"
+                    echo -e "  2. 设置权限：chmod +x /usr/local/bin/ss-2022.sh"
+                    echo -e "  3. 运行安装：/usr/local/bin/ss-2022.sh"
+                    echo -e "${Info} 或者直接保存当前下载的脚本："
+                    echo -e "  mv ${temp_file} /usr/local/bin/ss-2022.sh && chmod +x /usr/local/bin/ss-2022.sh"
+                    rm -f ${temp_file}
+                    return 1
+                fi
+            else
+                target_script="${SCRIPT_PATH}/${SCRIPT_NAME}"
             fi
             
-            # 确保备份路径有效
-            local backup_file="${SCRIPT_PATH}/${SCRIPT_NAME}.bak.${SCRIPT_VERSION}"
-            if [[ -e "${SCRIPT_PATH}/${SCRIPT_NAME}" ]]; then
-                cp "${SCRIPT_PATH}/${SCRIPT_NAME}" "${backup_file}"
+            # 备份当前脚本
+            local backup_file="${target_script}.bak.${SCRIPT_VERSION}"
+            if [[ -f "${target_script}" ]]; then
+                cp "${target_script}" "${backup_file}"
                 echo -e "${Info} 已备份当前版本到 ${backup_file}"
             else
-                echo -e "${Warning} 当前脚本文件不存在，跳过备份"
+                echo -e "${Warning} 未找到脚本文件 ${target_script}，跳过备份"
             fi
             
-            mv -f ${temp_file} "${SCRIPT_PATH}/${SCRIPT_NAME}"
-            chmod +x "${SCRIPT_PATH}/${SCRIPT_NAME}"
+            # 更新脚本
+            mv -f ${temp_file} "${target_script}"
+            chmod +x "${target_script}"
             echo -e "${Success} 脚本已更新至 [ ${sh_new_ver} ]"
             echo -e "${Info} 2秒后执行新脚本..."
             sleep 2s
-            exec "${SCRIPT_PATH}/${SCRIPT_NAME}"
+            exec "${target_script}"
         else
             echo -e "${Info} 已取消更新..."
             rm -f ${temp_file}
