@@ -945,8 +945,21 @@ Update_Shell() {
         read -p "(默认: y)：" yn
         [[ -z "${yn}" ]] && yn="y"
         if [[ ${yn} == [Yy] ]]; then
-            cp "${SCRIPT_PATH}/${SCRIPT_NAME}" "${SCRIPT_PATH}/${SCRIPT_NAME}.bak.${SCRIPT_VERSION}"
-            echo -e "${Info} 已备份当前版本到 ${SCRIPT_NAME}.bak.${SCRIPT_VERSION}"
+            # 检查 SCRIPT_PATH 是否有效
+            if [[ "${SCRIPT_PATH}" =~ ^/dev/fd/ || ! -d "${SCRIPT_PATH}" ]]; then
+                echo -e "${Warning} 检测到无效的脚本路径，使用默认路径 /usr/local/bin"
+                SCRIPT_PATH="/usr/local/bin"
+                SCRIPT_NAME="ss-2022.sh"
+            fi
+            
+            # 确保备份路径有效
+            local backup_file="${SCRIPT_PATH}/${SCRIPT_NAME}.bak.${SCRIPT_VERSION}"
+            if [[ -e "${SCRIPT_PATH}/${SCRIPT_NAME}" ]]; then
+                cp "${SCRIPT_PATH}/${SCRIPT_NAME}" "${backup_file}"
+                echo -e "${Info} 已备份当前版本到 ${backup_file}"
+            else
+                echo -e "${Warning} 当前脚本文件不存在，跳过备份"
+            fi
             
             mv -f ${temp_file} "${SCRIPT_PATH}/${SCRIPT_NAME}"
             chmod +x "${SCRIPT_PATH}/${SCRIPT_NAME}"
