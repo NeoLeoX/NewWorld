@@ -51,7 +51,7 @@ EOF
     sysctl -p >/dev/null 2>&1
 
     if lsmod | grep -q tcp_bbr && sysctl net.ipv4.tcp_congestion_control | grep -q bbr; then
-        echo -e "${GREEN}BBR 和系统参数已成功配置。${RESET}"
+        echo -e "${GREEN}BBR 和系统参数已成功配置。${ [removed]${RESET}"
     else
         echo -e "${YELLOW}BBR 或系统参数配置可能需要重启系统才能生效。${RESET}"
     fi
@@ -182,17 +182,15 @@ main_menu() {
         echo -e "${YELLOW}2. 安装 BBR v3 (XanMod版本)${RESET}"
         echo -e "${YELLOW}3. 安装 BBR v3 (手动编译)${RESET}"
         echo -e "${YELLOW}4. 验证 BBR 状态${RESET}"
-        echo -e "${YELLOW}5. 返回上级菜单${RESET}"
-        echo -e "${YELLOW}6. 退出脚本${RESET}"
-        read -p "请选择操作 [1-6]: " choice
+        echo -e "${YELLOW}0. 退出脚本${RESET}"
+        read -p "请选择操作 [0-4]: " choice
 
         case "$choice" in
             1) enable_bbr ;;
             2) install_xanmod_bbr ;;
             3) install_bbr3_manual ;;
             4) verify_bbr_status ;;
-            5) return 0 ;;
-            6) exit 0 ;;
+            0) exit 0 ;;
             *) echo -e "${RED}无效的选择${RESET}" ;;
         esac
     done
