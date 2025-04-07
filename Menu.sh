@@ -193,7 +193,7 @@ check_and_show_status() {
     if [[ "$kernel_version" =~ "xanmod" ]]; then
         bbr_status="XanMod 内核"
     elif [[ "$sysctl_bbr" == "bbr" ]]; then
-        bbr_status="启用 BBR"
+        bbr_status="已启用 BBR"
     else
         bbr_status="未启用 BBR"
     fi
