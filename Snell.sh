@@ -10,14 +10,13 @@ YELLOW='\033[0;33m'
 CYAN='\033[0;36m'
 RESET='\033[0m'
 
-#当前版本号
+# 当前版本号
 current_version="1.0"
 
 # 检查 bc 是否安装
 check_bc() {
     if ! command -v bc &> /dev/null; then
         echo -e "${YELLOW}未检测到 bc，正在安装...${RESET}"
-        # 根据系统类型安装 bc
         if [ -x "$(command -v apt)" ]; then
             wait_for_apt
             apt update && apt install -y bc
@@ -30,67 +29,29 @@ check_bc() {
     fi
 }
 
+# 检查 netstat 是否安装
+check_netstat() {
+    if ! command -v netstat &> /dev/null; then
+        echo -e "${YELLOW}未检测到 netstat，正在安装...${RESET}"
+        if [ -x "$(command -v apt)" ]; then
+            wait_for_apt
+            apt update && apt install -y net-tools
+        elif [ -x "$(command -v yum)" ]; then
+            yum install -y net-tools
+        else
+            echo -e "${RED}未支持的包管理器，无法安装 net-tools。请手动安装以支持端口检查。${RESET}"
+            echo -e "${YELLOW}将跳过端口占用检查，可能导致安装失败。${RESET}"
+            return 1
+        fi
+    fi
+}
+
 # 定义系统路径
 INSTALL_DIR="/usr/local/bin"
 SYSTEMD_DIR="/etc/systemd/system"
 SNELL_CONF_DIR="/etc/snell"
 SNELL_CONF_FILE="${SNELL_CONF_DIR}/users/snell-main.conf"
 SYSTEMD_SERVICE_FILE="${SYSTEMD_DIR}/snell.service"
-
-# 更新脚本
-update_script() {
-    echo -e "${CYAN}正在检查脚本更新...${RESET}"
-    
-    # 创建临时文件
-    TMP_SCRIPT=$(mktemp)
-    
-    # 下载最新版本
-    if curl -sL https://raw.githubusercontent.com/NeoLeoX/NewWorld/refs/heads/main/Snell.sh -o "$TMP_SCRIPT"; then
-        # 获取新版本号
-        new_version=$(grep "current_version=" "$TMP_SCRIPT" | grep -oP '(?<=current_version=")[^"]*' || echo "unknown")
-        
-        if [ -z "$new_version" ] || [ "$new_version" = "unknown" ]; then
-            echo -e "${RED}无法从远程脚本中解析版本号，请检查脚本内容或网络连接${RESET}"
-            rm -f "$TMP_SCRIPT"
-            return 1
-        fi
-        
-        echo -e "${YELLOW}当前版本：${current_version}${RESET}"
-        echo -e "${YELLOW}最新版本：${new_version}${RESET}"
-        
-        # 比较版本号
-        if [ "$new_version" != "$current_version" ]; then
-            echo -e "${CYAN}是否更新到新版本？[y/N]${RESET}"
-            read -r choice
-            if [[ "$choice" == "y" || "$choice" == "Y" ]]; then
-                # 获取当前脚本的完整路径
-                SCRIPT_PATH=$(readlink -f "$0")
-                
-                # 备份当前脚本
-                cp "$SCRIPT_PATH" "${SCRIPT_PATH}.backup"
-                
-                # 更新脚本
-                mv "$TMP_SCRIPT" "$SCRIPT_PATH"
-                chmod +x "$SCRIPT_PATH"
-                
-                echo -e "${GREEN}脚本已更新到最新版本${RESET}"
-                echo -e "${YELLOW}已备份原脚本到：${SCRIPT_PATH}.backup${RESET}"
-                echo -e "${CYAN}请重新运行脚本以使用新版本${RESET}"
-                exit 0
-            else
-                echo -e "${YELLOW}已取消更新${RESET}"
-                rm -f "$TMP_SCRIPT"
-            fi
-        else
-            echo -e "${GREEN}当前已是最新版本${RESET}"
-            rm -f "$TMP_SCRIPT"
-        fi
-    else
-        echo -e "${RED}下载新版本失败，请检查网络连接${RESET}"
-        rm -f "$TMP_SCRIPT"
-        return 1
-    fi
-}
 
 # 等待其他 apt 进程完成
 wait_for_apt() {
@@ -113,7 +74,6 @@ check_root
 check_jq() {
     if ! command -v jq &> /dev/null; then
         echo -e "${YELLOW}未检测到 jq，正在安装...${RESET}"
-        # 根据系统类型安装 jq
         if [ -x "$(command -v apt)" ]; then
             wait_for_apt
             apt update && apt install -y jq
@@ -151,15 +111,12 @@ version_greater_equal() {
     local ver1=$1
     local ver2=$2
     
-    # 移除 'v' 或 'V' 前缀，并转换为小写
     ver1=$(echo "${ver1#[vV]}" | tr '[:upper:]' '[:lower:]')
     ver2=$(echo "${ver2#[vV]}" | tr '[:upper:]' '[:lower:]')
     
-    # 将版本号分割为数组
     IFS='.' read -ra VER1 <<< "$ver1"
     IFS='.' read -ra VER2 <<< "$ver2"
     
-    # 确保数组长度相等
     while [ ${#VER1[@]} -lt 3 ]; do
         VER1+=("0")
     done
@@ -167,7 +124,6 @@ version_greater_equal() {
         VER2+=("0")
     done
     
-    # 比较版本号
     for i in {0..2}; do
         if [ "${VER1[i]:-0}" -gt "${VER2[i]:-0}" ]; then
             return 0
@@ -178,13 +134,28 @@ version_greater_equal() {
     return 0
 }
 
-# 用户输入端口号，范围 1-65535
+# 用户输入端口号，范围 1-65535，若回车则随机生成
 get_user_port() {
     while true; do
-        read -rp "请输入要使用的端口号 (1-65535): " PORT
-        if [[ "$PORT" =~ ^[0-9]+$ ]] && [ "$PORT" -ge 1 ] && [ "$PORT" -le 65535 ]; then
-            echo -e "${GREEN}已选择端口: $PORT${RESET}"
+        read -rp "请输入要使用的端口号 (1-65535，直接回车生成随机端口): " PORT
+        if [ -z "$PORT" ]; then
+            # 用户未输入，生成随机端口
+            PORT=$((RANDOM % 64536 + 1000))  # 生成 1000-65535 之间的随机端口
+            echo -e "${GREEN}未输入端口，已随机生成端口: $PORT${RESET}"
+            # 检查端口是否被占用
+            if command -v netstat &> /dev/null && netstat -tuln | grep -q ":$PORT "; then
+                echo -e "${YELLOW}端口 $PORT 已被占用，正在重新生成...${RESET}"
+                continue
+            fi
             break
+        elif [[ "$PORT" =~ ^[0-9]+$ ]] && [ "$PORT" -ge 1 ] && [ "$PORT" -le 65535 ]; then
+            # 检查端口是否被占用
+            if command -v netstat &> /dev/null && netstat -tuln | grep -q ":$PORT "; then
+                echo -e "${RED}端口 $PORT 已被占用，请选择其他端口。${RESET}"
+            else
+                echo -e "${GREEN}已选择端口: $PORT${RESET}"
+                break
+            fi
         else
             echo -e "${RED}无效端口号，请输入 1 到 65535 之间的数字。${RESET}"
         fi
@@ -193,7 +164,6 @@ get_user_port() {
 
 # 获取系统DNS
 get_system_dns() {
-    # 尝试从resolv.conf获取系统DNS
     if [ -f "/etc/resolv.conf" ]; then
         system_dns=$(grep -E '^nameserver' /etc/resolv.conf | awk '{print $2}' | tr '\n' ',' | sed 's/,$//')
         if [ ! -z "$system_dns" ]; then
@@ -201,8 +171,6 @@ get_system_dns() {
             return 0
         fi
     fi
-    
-    # 如果无法从resolv.conf获取，尝试使用公共DNS
     echo "1.1.1.1,8.8.8.8"
 }
 
@@ -221,23 +189,16 @@ get_dns() {
 # 开放端口 (ufw 和 iptables)
 open_port() {
     local PORT=$1
-    # 检查 ufw 是否已安装
     if command -v ufw &> /dev/null; then
         echo -e "${CYAN}在 UFW 中开放端口 $PORT${RESET}"
         ufw allow "$PORT"/tcp
     fi
-
-    # 检查 iptables 是否已安装
     if command -v iptables &> /dev/null; then
         echo -e "${CYAN}在 iptables 中开放端口 $PORT${RESET}"
         iptables -I INPUT -p tcp --dport "$PORT" -j ACCEPT
-        
-        # 创建 iptables 规则保存目录（如果不存在）
         if [ ! -d "/etc/iptables" ]; then
             mkdir -p /etc/iptables
         fi
-        
-        # 尝试保存规则，如果失败则不中断脚本
         iptables-save > /etc/iptables/rules.v4 || true
     fi
 }
@@ -274,14 +235,12 @@ install_snell() {
     rm snell-server.zip
     chmod +x ${INSTALL_DIR}/snell-server
 
-    get_user_port  # 获取用户输入的端口
+    get_user_port  # 获取用户输入的端口或随机生成
     get_dns # 获取用户输入的 DNS 服务器
     PSK=$(tr -dc A-Za-z0-9 </dev/urandom | head -c 20)
 
-    # 创建用户配置目录
     mkdir -p ${SNELL_CONF_DIR}/users
 
-    # 将主用户配置存储在 users 目录下
     cat > ${SNELL_CONF_FILE} << EOF
 [snell-server]
 listen = ::0:${PORT}
@@ -328,10 +287,8 @@ EOF
         exit 1
     fi
 
-    # 开放端口
     open_port "$PORT"
 
-    # 在安装完成后输出配置信息
     echo -e "\n${GREEN}安装完成！以下是您的配置信息：${RESET}"
     echo -e "${CYAN}--------------------------------${RESET}"
     echo -e "${YELLOW}监听端口: ${PORT}${RESET}"
@@ -340,57 +297,43 @@ EOF
     echo -e "${YELLOW}DNS 服务器: ${DNS}${RESET}"
     echo -e "${CYAN}--------------------------------${RESET}"
 
-    # 获取并显示服务器IP地址
     echo -e "\n${GREEN}服务器地址信息：${RESET}"
-    
-    # 获取 IPv4 地址
     IPV4_ADDR=$(curl -s4 https://api.ipify.org)
     if [ $? -eq 0 ] && [ ! -z "$IPV4_ADDR" ]; then
         IP_COUNTRY_IPV4=$(curl -s http://ipinfo.io/${IPV4_ADDR}/country)
         echo -e "${GREEN}IPv4 地址: ${RESET}${IPV4_ADDR} ${GREEN}所在国家: ${RESET}${IP_COUNTRY_IPV4}"
     fi
     
-    # 获取 IPv6 地址
     IPV6_ADDR=$(curl -s6 https://api64.ipify.org)
     if [ $? -eq 0 ] && [ ! -z "$IPV6_ADDR" ]; then
         IP_COUNTRY_IPV6=$(curl -s https://ipapi.co/${IPV6_ADDR}/country/)
         echo -e "${GREEN}IPv6 地址: ${RESET}${IPV6_ADDR} ${GREEN}所在国家: ${RESET}${IP_COUNTRY_IPV6}"
     fi
 
-    # 输出 Surge 配置格式
     echo -e "\n${GREEN}Surge 配置格式：${RESET}"
     if [ ! -z "$IPV4_ADDR" ]; then
         echo -e "${GREEN}${IP_COUNTRY_IPV4} = snell, ${IPV4_ADDR}, ${PORT}, psk = ${PSK}, version = 4, reuse = true, tfo = true${RESET}"
     fi
-    
     if [ ! -z "$IPV6_ADDR" ]; then
         echo -e "${GREEN}${IP_COUNTRY_IPV6} = snell, ${IPV6_ADDR}, ${PORT}, psk = ${PSK}, version = 4, reuse = true, tfo = true${RESET}"
     fi
 
-    # 创建管理脚本
     echo -e "${CYAN}正在安装管理脚本...${RESET}"
-    
-    # 确保目标目录存在
     mkdir -p /usr/local/bin
-    
-    # 创建管理脚本
     cat > /usr/local/bin/snell << 'EOFSCRIPT'
 #!/bin/bash
 
-# 定义颜色代码
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[0;33m'
 CYAN='\033[0;36m'
 RESET='\033[0m'
 
-# 检查是否以 root 权限运行
 if [ "$(id -u)" != "0" ]; then
     echo -e "${RED}请以 root 权限运行此脚本${RESET}"
     exit 1
 fi
 
-# 下载并执行最新版本的脚本
 echo -e "${CYAN}正在获取最新版本的管理脚本...${RESET}"
 TMP_SCRIPT=$(mktemp)
 if curl -sL https://raw.githubusercontent.com/NeoLeoX/NewWorld/refs/heads/main/Snell.sh -o "$TMP_SCRIPT"; then
@@ -423,11 +366,9 @@ EOFSCRIPT
 uninstall_snell() {
     echo -e "${CYAN}正在卸载 Snell${RESET}"
 
-    # 停止并禁用主服务
     systemctl stop snell
     systemctl disable snell
 
-    # 停止并禁用所有多用户服务
     if [ -d "${SNELL_CONF_DIR}/users" ]; then
         for user_conf in "${SNELL_CONF_DIR}/users"/*; do
             if [ -f "$user_conf" ]; then
@@ -442,15 +383,11 @@ uninstall_snell() {
         done
     fi
 
-    # 删除服务文件
     rm -f /lib/systemd/system/snell.service
-
-    # 删除可执行文件和配置目录
     rm -f /usr/local/bin/snell-server
     rm -rf ${SNELL_CONF_DIR}
-    rm -f /usr/local/bin/snell  # 删除管理脚本
+    rm -f /usr/local/bin/snell
     
-    # 重载 systemd 配置
     systemctl daemon-reload
     
     echo -e "${GREEN}Snell 及其所有多用户配置已成功卸载${RESET}"
@@ -460,7 +397,6 @@ uninstall_snell() {
 restart_snell() {
     echo -e "${YELLOW}正在重启所有 Snell 服务...${RESET}"
     
-    # 重启主服务
     systemctl restart snell
     if [ $? -eq 0 ]; then
         echo -e "${GREEN}主 Snell 服务已成功重启。${RESET}"
@@ -468,7 +404,6 @@ restart_snell() {
         echo -e "${RED}重启主 Snell 服务失败。${RESET}"
     fi
 
-    # 重启所有多用户服务
     if [ -d "${SNELL_CONF_DIR}/users" ]; then
         for user_conf in "${SNELL_CONF_DIR}/users"/*; do
             if [ -f "$user_conf" ] && [[ "$user_conf" != *"snell-main.conf" ]]; then
@@ -491,20 +426,15 @@ restart_snell() {
 check_and_show_status() {
     echo -e "\n${CYAN}=============== 服务状态检查 ===============${RESET}"
     
-    # 检查 Snell 状态
     if command -v snell-server &> /dev/null; then
-        # 初始化计数器和资源使用变量
         local user_count=0
         local running_count=0
         local total_snell_memory=0
         local total_snell_cpu=0
         
-        # 检查主服务状态
         if systemctl is-active snell &> /dev/null; then
             user_count=$((user_count + 1))
             running_count=$((running_count + 1))
-            
-            # 获取主服务资源使用情况
             local main_pid=$(systemctl show -p MainPID snell | cut -d'=' -f2)
             if [ ! -z "$main_pid" ] && [ "$main_pid" != "0" ]; then
                 local mem=$(ps -o rss= -p $main_pid 2>/dev/null)
@@ -520,7 +450,6 @@ check_and_show_status() {
             user_count=$((user_count + 1))
         fi
         
-        # 检查多用户状态
         if [ -d "${SNELL_CONF_DIR}/users" ]; then
             for user_conf in "${SNELL_CONF_DIR}/users"/*; do
                 if [ -f "$user_conf" ] && [[ "$user_conf" != *"snell-main.conf" ]]; then
@@ -529,8 +458,6 @@ check_and_show_status() {
                         user_count=$((user_count + 1))
                         if systemctl is-active --quiet "snell-${port}"; then
                             running_count=$((running_count + 1))
-                            
-                            # 获取用户服务资源使用情况
                             local user_pid=$(systemctl show -p MainPID "snell-${port}" | cut -d'=' -f2)
                             if [ ! -z "$user_pid" ] && [ "$user_pid" != "0" ]; then
                                 local mem=$(ps -o rss= -p $user_pid 2>/dev/null)
@@ -548,36 +475,28 @@ check_and_show_status() {
             done
         fi
         
-        # 显示 Snell 状态
         local total_snell_memory_mb=$(echo "scale=2; $total_snell_memory/1024" | bc)
         printf "${GREEN}Snell 已安装${RESET}  ${YELLOW}CPU：%.2f%%${RESET}  ${YELLOW}内存：%.2f MB${RESET}  ${GREEN}运行中：${running_count}/${user_count}${RESET}\n" "$total_snell_cpu" "$total_snell_memory_mb"
     else
         echo -e "${YELLOW}Snell 未安装${RESET}"
     fi
     
-    # 检查 ShadowTLS 状态
     if [ -f "/usr/local/bin/shadow-tls" ]; then
-        # 初始化 ShadowTLS 服务计数器和资源使用
         local stls_total=0
         local stls_running=0
         local total_stls_memory=0
         local total_stls_cpu=0
         declare -A processed_ports
         
-        # 检查 Snell 的 ShadowTLS 服务
         local snell_services=$(find /etc/systemd/system -name "shadowtls-snell-*.service" 2>/dev/null | sort -u)
         if [ ! -z "$snell_services" ]; then
             while IFS= read -r service_file; do
                 local port=$(basename "$service_file" | sed 's/shadowtls-snell-\([0-9]*\)\.service/\1/')
-                
-                # 检查是否已处理过该端口
                 if [ -z "${processed_ports[$port]}" ]; then
                     processed_ports[$port]=1
                     stls_total=$((stls_total + 1))
                     if systemctl is-active "shadowtls-snell-${port}" &> /dev/null; then
                         stls_running=$((stls_running + 1))
-                        
-                        # 获取 ShadowTLS 服务资源使用情况
                         local stls_pid=$(systemctl show -p MainPID "shadowtls-snell-${port}" | cut -d'=' -f2)
                         if [ ! -z "$stls_pid" ] && [ "$stls_pid" != "0" ]; then
                             local mem=$(ps -o rss= -p $stls_pid 2>/dev/null)
@@ -594,7 +513,6 @@ check_and_show_status() {
             done <<< "$snell_services"
         fi
         
-        # 显示 ShadowTLS 状态
         if [ $stls_total -gt 0 ]; then
             local total_stls_memory_mb=$(echo "scale=2; $total_stls_memory/1024" | bc)
             printf "${GREEN}ShadowTLS 已安装${RESET}  ${YELLOW}CPU：%.2f%%${RESET}  ${YELLOW}内存：%.2f MB${RESET}  ${GREEN}运行中：${stls_running}/${stls_total}${RESET}\n" "$total_stls_cpu" "$total_stls_memory_mb"
@@ -613,21 +531,18 @@ view_snell_config() {
     echo -e "${GREEN}Snell 配置信息:${RESET}"
     echo -e "${CYAN}================================${RESET}"
     
-    # 获取 IPv4 地址
     IPV4_ADDR=$(curl -s4 https://api.ipify.org)
     if [ $? -eq 0 ] && [ ! -z "$IPV4_ADDR" ]; then
         IP_COUNTRY_IPV4=$(curl -s http://ipinfo.io/${IPV4_ADDR}/country)
         echo -e "${GREEN}IPv4 地址: ${RESET}${IPV4_ADDR} ${GREEN}所在国家: ${RESET}${IP_COUNTRY_IPV4}"
     fi
     
-    # 获取 IPv6 地址
     IPV6_ADDR=$(curl -s6 https://api64.ipify.org)
     if [ $? -eq 0 ] && [ ! -z "$IPV6_ADDR" ]; then
         IP_COUNTRY_IPV6=$(curl -s https://ipapi.co/${IPV6_ADDR}/country/)
         echo -e "${GREEN}IPv6 地址: ${RESET}${IPV6_ADDR} ${GREEN}所在国家: ${RESET}${IP_COUNTRY_IPV6}"
     fi
     
-    # 检查是否获取到 IP 地址
     if [ -z "$IPV4_ADDR" ] && [ -z "$IPV6_ADDR" ]; then
         echo -e "${RED}无法获取到公网 IP 地址，请检查网络连接。${RESET}"
         return
@@ -635,7 +550,6 @@ view_snell_config() {
     
     echo -e "\n${YELLOW}=== 用户配置列表 ===${RESET}"
     
-    # 显示主用户配置
     local main_conf="${SNELL_CONF_DIR}/users/snell-main.conf"
     if [ -f "$main_conf" ]; then
         echo -e "\n${GREEN}主用户配置：${RESET}"
@@ -660,7 +574,6 @@ view_snell_config() {
         fi
     fi
     
-    # 显示其他用户配置
     if [ -d "${SNELL_CONF_DIR}/users" ]; then
         for user_conf in "${SNELL_CONF_DIR}/users"/*; do
             if [ -f "$user_conf" ] && [[ "$user_conf" != *"snell-main.conf" ]]; then
@@ -687,7 +600,6 @@ view_snell_config() {
         done
     fi
     
-    # 如果 ShadowTLS 已安装，显示组合配置
     if shadowtls_config=$(get_shadowtls_config); then
         IFS='|' read -r stls_psk stls_domain stls_port <<< "$shadowtls_config"
         echo -e "\n${YELLOW}=== ShadowTLS 配置 ===${RESET}"
@@ -697,7 +609,6 @@ view_snell_config() {
         echo -e "  - SNI：${stls_domain}"
         echo -e "  - 版本：3"
         
-        # 获取所有用户配置
         local user_configs=$(get_all_snell_users)
         if [ ! -z "$user_configs" ]; then
             while IFS='|' read -r port psk; do
@@ -758,34 +669,13 @@ check_snell_update() {
     fi
 }
 
-# 获取最新 GitHub 版本
-get_latest_github_version() {
-    local api_url="https://api.github.com/repos/NeoLeoX/NewWorld/contents/Snell.sh?ref=main"
-    local response
-    
-    response=$(curl -s "$api_url")
-    if [ $? -ne 0 ] || [ -z "$response" ]; then
-        echo -e "${RED}无法获取 GitHub 上的最新版本信息。${RESET}"
-        return 1
-    fi
-
-    GITHUB_VERSION=$(echo "$response" | grep -o '"tag_name": "[^"]*"' | cut -d'"' -f4)
-    if [ -z "$GITHUB_VERSION" ]; then
-        echo -e "${RED}解析 GitHub 版本信息失败。${RESET}"
-        return 1
-    fi
-}
-
 # 更新脚本
 update_script() {
     echo -e "${CYAN}正在检查脚本更新...${RESET}"
     
-    # 创建临时文件
     TMP_SCRIPT=$(mktemp)
     
-    # 下载最新版本
     if curl -sL https://raw.githubusercontent.com/NeoLeoX/NewWorld/refs/heads/main/Snell.sh -o "$TMP_SCRIPT"; then
-        # 获取新版本号
         new_version=$(grep '^current_version="' "$TMP_SCRIPT" | head -n 1 | cut -d'"' -f2)
         
         if [ -z "$new_version" ]; then
@@ -797,21 +687,14 @@ update_script() {
         echo -e "${YELLOW}当前版本：${current_version}${RESET}"
         echo -e "${YELLOW}最新版本：${new_version}${RESET}"
         
-        # 比较版本号
         if [ "$new_version" != "$current_version" ]; then
             echo -e "${CYAN}是否更新到新版本？[y/N]${RESET}"
             read -r choice
             if [[ "$choice" == "y" || "$choice" == "Y" ]]; then
-                # 获取当前脚本的完整路径
                 SCRIPT_PATH=$(readlink -f "$0")
-                
-                # 备份当前脚本
                 cp "$SCRIPT_PATH" "${SCRIPT_PATH}.backup"
-                
-                # 更新脚本
                 mv "$TMP_SCRIPT" "$SCRIPT_PATH"
                 chmod +x "$SCRIPT_PATH"
-                
                 echo -e "${GREEN}脚本已更新到最新版本${RESET}"
                 echo -e "${YELLOW}已备份原脚本到：${SCRIPT_PATH}.backup${RESET}"
                 echo -e "${CYAN}请重新运行脚本以使用新版本${RESET}"
@@ -843,13 +726,11 @@ check_installation() {
 
 # 获取 ShadowTLS 配置
 get_shadowtls_config() {
-    # 获取主 Snell 端口
     local main_port=$(get_snell_port)
     if [ -z "$main_port" ]; then
         return 1
     fi
     
-    # 检查对应端口的 ShadowTLS 服务
     local service_name="shadowtls-snell-${main_port}"
     if ! systemctl is-active --quiet "$service_name"; then
         return 1
@@ -860,13 +741,11 @@ get_shadowtls_config() {
         return 1
     fi
     
-    # 从服务文件中读取配置行
     local exec_line=$(grep "ExecStart=" "$service_file")
     if [ -z "$exec_line" ]; then
         return 1
     fi
     
-    # 提取配置信息
     local tls_domain=$(echo "$exec_line" | grep -o -- "--tls [^ ]*" | cut -d' ' -f2)
     local password=$(echo "$exec_line" | grep -o -- "--password [^ ]*" | cut -d' ' -f2)
     local listen_part=$(echo "$exec_line" | grep -o -- "--listen [^ ]*" | cut -d' ' -f2)
@@ -880,18 +759,11 @@ get_shadowtls_config() {
     return 0
 }
 
-# 检查是否以 root 权限运行
-check_root() {
-    if [ "$(id -u)" != "0" ]; then
-        echo -e "${RED}请以 root 权限运行此脚本${RESET}"
-        exit 1
-    fi
-}
-
 # 初始检查
 initial_check() {
     check_root
     check_bc
+    check_netstat
     check_and_show_status
 }
 
@@ -902,10 +774,8 @@ initial_check
 setup_multi_user() {
     echo -e "${CYAN}正在执行多用户管理脚本...${RESET}"
     bash <(curl -sL https://raw.githubusercontent.com/NeoLeoX/NewWorld/refs/heads/main/multi-user.sh)
-    
-    # 多用户管理脚本执行完毕后会自动返回这里
     echo -e "${GREEN}多用户管理操作完成${RESET}"
-    sleep 1  # 给用户一点时间看到提示
+    sleep 1
 }
 
 # 主菜单
@@ -915,7 +785,6 @@ show_menu() {
     echo -e "${CYAN}          Snell 管理脚本 v${current_version}${RESET}"
     echo -e "${CYAN}============================================${RESET}"
     
-    # 显示服务状态
     check_and_show_status
     
     echo -e "${YELLOW}=== 基础功能 ===${RESET}"
@@ -939,26 +808,20 @@ show_menu() {
     read -rp "请输入选项 [0-10]: " num
 }
 
-#开启bbr
+# 开启 BBR
 setup_bbr() {
     echo -e "${CYAN}正在获取并执行 BBR 管理脚本...${RESET}"
-    
-    # 直接从远程执行BBR脚本
     bash <(curl -sL https://raw.githubusercontent.com/NeoLeoX/NewWorld/refs/heads/main/BBR.sh)
-    
-    # BBR 脚本执行完毕后会自动返回这里
     echo -e "${GREEN}BBR 管理操作完成${RESET}"
-    sleep 1  # 给用户一点时间看到提示
+    sleep 1
 }
 
-# ShadowTLS管理
+# ShadowTLS 管理
 setup_shadowtls() {
     echo -e "${CYAN}正在执行 ShadowTLS 管理脚本...${RESET}"
     bash <(curl -sL https://raw.githubusercontent.com/NeoLeoX/NewWorld/refs/heads/main/ShadowTLS.sh)
-    
-    # ShadowTLS 脚本执行完毕后会自动返回这里
     echo -e "${GREEN}ShadowTLS 管理操作完成${RESET}"
-    sleep 1  # 给用户一点时间看到提示
+    sleep 1
 }
 
 # 获取 Snell 端口
@@ -970,12 +833,10 @@ get_snell_port() {
 
 # 获取所有 Snell 用户配置
 get_all_snell_users() {
-    # 检查用户配置目录是否存在
     if [ ! -d "${SNELL_CONF_DIR}/users" ]; then
         return 1
     fi
     
-    # 首先获取主用户配置
     local main_port=""
     local main_psk=""
     if [ -f "${SNELL_CONF_DIR}/users/snell-main.conf" ]; then
@@ -986,7 +847,6 @@ get_all_snell_users() {
         fi
     fi
     
-    # 获取其他用户配置
     for user_conf in "${SNELL_CONF_DIR}/users"/snell-*.conf; do
         if [ -f "$user_conf" ] && [[ "$user_conf" != *"snell-main.conf" ]]; then
             local port=$(grep -E '^listen' "$user_conf" | sed -n 's/.*::0:\([0-9]*\)/\1/p')
