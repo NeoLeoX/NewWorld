@@ -36,7 +36,6 @@ check_snell_installed() {
 
 # 获取系统DNS
 get_system_dns() {
-    # 尝试从resolv.conf获取系统DNS
     if [ -f "/etc/resolv.conf" ]; then
         system_dns=$(grep -E '^nameserver' /etc/resolv.conf | awk '{print $2}' | tr '\n' ',' | sed 's/,$//')
         if [ ! -z "$system_dns" ]; then
@@ -44,8 +43,6 @@ get_system_dns() {
             return 0
         fi
     fi
-    
-    # 如果无法从resolv.conf获取，尝试使用公共DNS
     echo "1.1.1.1,8.8.8.8"
 }
 
@@ -64,23 +61,16 @@ get_dns() {
 # 开放端口 (ufw 和 iptables)
 open_port() {
     local PORT=$1
-    # 检查 ufw 是否已安装
     if command -v ufw &> /dev/null; then
         echo -e "${CYAN}在 UFW 中开放端口 $PORT${RESET}"
         ufw allow "$PORT"/tcp
     fi
-
-    # 检查 iptables 是否已安装
     if command -v iptables &> /dev/null; then
         echo -e "${CYAN}在 iptables 中开放端口 $PORT${RESET}"
         iptables -I INPUT -p tcp --dport "$PORT" -j ACCEPT
-        
-        # 创建 iptables 规则保存目录（如果不存在）
         if [ ! -d "/etc/iptables" ]; then
             mkdir -p /etc/iptables
         fi
-        
-        # 尝试保存规则，如果失败则不中断脚本
         iptables-save > /etc/iptables/rules.v4 || true
     fi
 }
@@ -95,12 +85,9 @@ get_main_port() {
 
 # 获取所有用户端口
 get_all_ports() {
-    # 检查用户配置目录是否存在
     if [ ! -d "${SNELL_CONF_DIR}/users" ]; then
         return 1
     fi
-    
-    # 获取所有配置文件中的端口
     for conf_file in "${SNELL_CONF_DIR}/users"/snell-*.conf; do
         if [ -f "$conf_file" ]; then
             grep -E '^listen' "$conf_file" | sed -n 's/.*::0:\([0-9]*\)/\1/p'
@@ -135,7 +122,6 @@ list_users() {
 # 检查端口是否已被使用
 check_port_usage() {
     local port=$1
-    # 检查是否被其他 snell 实例使用
     if [ -d "${SNELL_CONF_DIR}/users" ]; then
         for conf in "${SNELL_CONF_DIR}/users"/*; do
             if [ -f "$conf" ]; then
@@ -146,7 +132,6 @@ check_port_usage() {
             fi
         done
     fi
-    # 检查主配置文件
     if [ -f "${SNELL_CONF_DIR}/snell-server.conf" ]; then
         local main_port=$(grep -E '^listen' "${SNELL_CONF_DIR}/snell-server.conf" | sed -n 's/.*::0:\([0-9]*\)/\1/p')
         if [ "$main_port" == "$port" ]; then
@@ -156,35 +141,42 @@ check_port_usage() {
     return 0
 }
 
+# 生成随机端口号
+generate_random_port() {
+    while true; do
+        PORT=$((RANDOM % 64512 + 1024))  # 生成1024-65535之间的随机端口
+        if check_port_usage "$PORT"; then
+            echo "$PORT"
+            return 0
+        fi
+    done
+}
+
 # 添加新用户
 add_user() {
     echo -e "\n${YELLOW}=== 添加新用户 ===${RESET}"
     
-    # 创建用户配置目录
     mkdir -p "${SNELL_CONF_DIR}/users"
     
-    # 获取端口号
-    while true; do
-        read -rp "请输入新用户端口号 (1-65535): " PORT
-        if [[ "$PORT" =~ ^[0-9]+$ ]] && [ "$PORT" -ge 1 ] && [ "$PORT" -le 65535 ]; then
-            # 检查端口是否已被使用
+    read -rp "请输入新用户端口号 (1024-65535，直接回车生成随机端口): " PORT
+    if [ -z "$PORT" ]; then
+        PORT=$(generate_random_port)
+        echo -e "${GREEN}已生成随机端口: $PORT${RESET}"
+    else
+        if [[ "$PORT" =~ ^[0-9]+$ ]] && [ "$PORT" -ge 1024 ] && [ "$PORT" -le 65535 ]; then
             if ! check_port_usage "$PORT"; then
-                echo -e "${RED}端口 $PORT 已被使用，请选择其他端口${RESET}"
-                continue
+                echo -e "${RED}端口 $PORT 已被使用，请选择其他端口或直接回车生成随机端口${RESET}"
+                return 1
             fi
-            break
         else
-            echo -e "${RED}无效端口号，请输入 1 到 65535 之间的数字${RESET}"
+            echo -e "${RED}无效端口号，请输入 1024 到 65535 之间的数字或直接回车生成随机端口${RESET}"
+            return 1
         fi
-    done
+    fi
     
-    # 生成随机 PSK
     PSK=$(tr -dc A-Za-z0-9 </dev/urandom | head -c 20)
-    
-    # 获取 DNS 设置
     get_dns
     
-    # 创建用户配置文件
     local user_conf="${SNELL_CONF_DIR}/users/snell-${PORT}.conf"
     cat > "$user_conf" << EOF
 [snell-server]
@@ -194,7 +186,6 @@ ipv6 = true
 dns = ${DNS}
 EOF
     
-    # 创建用户服务文件
     local service_name="snell-${PORT}"
     local service_file="${SYSTEMD_DIR}/${service_name}.service"
     cat > "$service_file" << EOF
@@ -217,14 +208,9 @@ SyslogIdentifier=snell-server-${PORT}
 WantedBy=multi-user.target
 EOF
 
-    # 重载 systemd 配置
     systemctl daemon-reload
-    
-    # 启用并启动服务
     systemctl enable "$service_name"
     systemctl start "$service_name"
-    
-    # 开放端口
     open_port "$PORT"
     
     echo -e "\n${GREEN}用户添加成功！配置信息：${RESET}"
@@ -238,30 +224,19 @@ EOF
 # 删除用户
 delete_user() {
     echo -e "\n${YELLOW}=== 删除用户 ===${RESET}"
-    
-    # 显示用户列表
     list_users
-    
-    # 获取要删除的用户端口
     read -rp "请输入要删除的用户端口号: " del_port
     
     local user_conf="${SNELL_CONF_DIR}/users/snell-${del_port}.conf"
     local service_name="snell-${del_port}"
     
     if [ -f "$user_conf" ]; then
-        # 停止并禁用服务
         systemctl stop "$service_name"
         systemctl disable "$service_name"
-        
-        # 删除服务文件
         rm -f "${SYSTEMD_DIR}/${service_name}.service"
         rm -f "/lib/systemd/system/${service_name}.service"
-        # 删除配置文件
         rm -f "$user_conf"
-        
-        # 重载 systemd 配置
         systemctl daemon-reload
-        
         echo -e "${GREEN}用户已成功删除${RESET}"
     else
         echo -e "${RED}未找到端口为 ${del_port} 的用户${RESET}"
@@ -271,11 +246,7 @@ delete_user() {
 # 修改用户配置
 modify_user() {
     echo -e "\n${YELLOW}=== 修改用户配置 ===${RESET}"
-    
-    # 显示用户列表
     list_users
-    
-    # 获取要修改的用户端口
     read -rp "请输入要修改的用户端口号: " mod_port
     
     local user_conf="${SNELL_CONF_DIR}/users/snell-${mod_port}.conf"
@@ -291,54 +262,42 @@ modify_user() {
         read -rp "请输入选项 [0-3]: " mod_choice
         case "$mod_choice" in
             1)
-                # 修改端口
-                while true; do
-                    read -rp "请输入新端口号 (1-65535): " new_port
-                    if [[ "$new_port" =~ ^[0-9]+$ ]] && [ "$new_port" -ge 1 ] && [ "$new_port" -le 65535 ]; then
+                read -rp "请输入新端口号 (1024-65535，直接回车生成随机端口): " new_port
+                if [ -z "$new_port" ]; then
+                    new_port=$(generate_random_port)
+                    echo -e "${GREEN}已生成随机端口: $new_port${RESET}"
+                else
+                    if [[ "$new_port" =~ ^[0-9]+$ ]] && [ "$new_port" -ge 1024 ] && [ "$new_port" -le 65535 ]; then
                         if ! check_port_usage "$new_port"; then
-                            echo -e "${RED}端口 $new_port 已被使用，请选择其他端口${RESET}"
-                            continue
+                            echo -e "${RED}端口 $new_port 已被使用，请选择其他端口或直接回车生成随机端口${RESET}"
+                            return 1
                         fi
-                        break
                     else
-                        echo -e "${RED}无效端口号，请输入 1 到 65535 之间的数字${RESET}"
+                        echo -e "${RED}无效端口号，请输入 1024 到 65535 之间的数字或直接回车生成随机端口${RESET}"
+                        return 1
                     fi
-                done
+                fi
                 
-                # 停止服务
                 systemctl stop "$service_name"
-                
-                # 修改配置文件中的端口
                 sed -i "s/listen = ::0:${mod_port}/listen = ::0:${new_port}/" "$user_conf"
-                
-                # 重命名配置文件和服务
                 mv "$user_conf" "${SNELL_CONF_DIR}/users/snell-${new_port}.conf"
                 mv "${SYSTEMD_DIR}/${service_name}.service" "${SYSTEMD_DIR}/snell-${new_port}.service"
-                
-                # 移动和更新服务文件
                 sed -i "s/Description=Snell Proxy Service (Port ${mod_port})/Description=Snell Proxy Service (Port ${new_port})/" "${SYSTEMD_DIR}/snell-${new_port}.service"
                 sed -i "s/SyslogIdentifier=snell-server-${mod_port}/SyslogIdentifier=snell-server-${new_port}/" "${SYSTEMD_DIR}/snell-${new_port}.service"
                 sed -i "s/${user_conf}/${SNELL_CONF_DIR}\/users\/snell-${new_port}.conf/" "${SYSTEMD_DIR}/snell-${new_port}.service"
-                
-                # 重载配置并启动服务
                 systemctl daemon-reload
                 systemctl enable "snell-${new_port}"
                 systemctl start "snell-${new_port}"
-                
-                # 开放新端口
                 open_port "$new_port"
-                
                 echo -e "${GREEN}端口修改成功${RESET}"
                 ;;
             2)
-                # 重置 PSK
                 local new_psk=$(tr -dc A-Za-z0-9 </dev/urandom | head -c 20)
                 sed -i "s/psk = .*/psk = ${new_psk}/" "$user_conf"
                 systemctl restart "$service_name"
                 echo -e "${GREEN}PSK 已重置为: ${new_psk}${RESET}"
                 ;;
             3)
-                # 修改 DNS
                 get_dns
                 sed -i "s/dns = .*/dns = ${DNS}/" "$user_conf"
                 systemctl restart "$service_name"
@@ -359,11 +318,7 @@ modify_user() {
 # 显示用户配置信息
 show_user_config() {
     echo -e "\n${YELLOW}=== 用户配置信息 ===${RESET}"
-    
-    # 显示用户列表
     list_users
-    
-    # 获取要查看的用户端口
     read -rp "请输入要查看的用户端口号: " view_port
     
     local user_conf="${SNELL_CONF_DIR}/users/snell-${view_port}.conf"
@@ -379,7 +334,6 @@ show_user_config() {
         echo -e "${YELLOW}PSK: ${psk}${RESET}"
         echo -e "${YELLOW}DNS: ${dns}${RESET}"
         
-        # 获取 IPv4 地址
         IPV4_ADDR=$(curl -s4 https://api.ipify.org)
         if [ $? -eq 0 ] && [ ! -z "$IPV4_ADDR" ]; then
             IP_COUNTRY_IPV4=$(curl -s http://ipinfo.io/${IPV4_ADDR}/country)
@@ -387,7 +341,6 @@ show_user_config() {
             echo -e "${GREEN}${IP_COUNTRY_IPV4} = snell, ${IPV4_ADDR}, ${port}, psk = ${psk}, version = 4, reuse = true, tfo = true${RESET}"
         fi
         
-        # 获取 IPv6 地址
         IPV6_ADDR=$(curl -s6 https://api64.ipify.org)
         if [ $? -eq 0 ] && [ ! -z "$IPV6_ADDR" ]; then
             IP_COUNTRY_IPV6=$(curl -s https://ipapi.co/${IPV6_ADDR}/country/)
@@ -453,4 +406,4 @@ while true; do
     esac
     echo -e "\n${CYAN}按任意键返回主菜单...${RESET}"
     read -n 1 -s -r
-done 
+done
