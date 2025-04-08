@@ -879,9 +879,9 @@ add_shadowtls_config() {
                 fi
 
                 password=$(tr -dc A-Za-z0-9 </dev/urandom | head -c 16)
-                read -rp "请输入 TLS 伪装域名 (直接回车默认为 www.microsoft.com): " tls_domain
+                read -rp "请输入 TLS 伪装域名 (直接回车默认为 douyin.com): " tls_domain
                 if [ -z "$tls_domain" ]; then
-                    tls_domain="www.microsoft.com"
+                    tls_domain="douyin.com"
                 fi
 
                 local user_configs=$(get_all_snell_users)
