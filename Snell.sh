@@ -650,6 +650,167 @@ get_current_snell_version() {
     fi
 }
 
+# 获取 Snell 最新版本
+get_latest_snell_version() {
+    latest_version=$(curl -s https://kb.nssurge.com/surge-knowledge-base/zh/release-notes/snell | grep -oP 'snell-server-v\K[0-9]+\.[0-9]+\.[0-9]+' | head -n 1)
+    if [ -n "$latest_version" ]; then
+        SNELL_VERSION="v${latest_version}"
+    else
+        echo -e "${RED}获取 Snell 最新版本失败，使用默认版本 ${SNELL_VERSION}${RESET}"
+    fi
+}
+
+# 获取当前安装的 Snell 版本
+get_current_snell_version() {
+    CURRENT_VERSION=$(snell-server --v 2>&1 | grep -oP 'v[0-9]+\.[0-9]+\.[0-9]+')
+    if [ -z "$CURRENT_VERSION" ]; then
+        echo -e "${RED}无法获取当前 Snell 版本。${RESET}"
+        exit 1
+    fi
+}
+
+# 比较版本号
+version_greater_equal() {
+    local ver1=$1
+    local ver2=$2
+    
+    ver1=$(echo "${ver1#[vV]}" | tr '[:upper:]' '[:lower:]')
+    ver2=$(echo "${ver2#[vV]}" | tr '[:upper:]' '[:lower:]')
+    
+    IFS='.' read -ra VER1 <<< "$ver1"
+    IFS='.' read -ra VER2 <<< "$ver2"
+    
+    while [ ${#VER1[@]} -lt 3 ]; do
+        VER1+=("0")
+    done
+    while [ ${#VER2[@]} -lt 3 ]; do
+        VER2+=("0")
+    done
+    
+    for i in {0..2}; do
+        if [ "${VER1[i]:-0}" -gt "${VER2[i]:-0}" ]; then
+            return 0
+        elif [ "${VER1[i]:-0}" -lt "${VER2[i]:-0}" ]; then
+            return 1
+        fi
+    done
+    return 0
+}
+
+# 获取 Snell 下载 URL
+get_snell_download_url() {
+    local version="$1"
+    ARCH=$(uname -m)
+    if [[ ${ARCH} == "aarch64" ]]; then
+        echo "https://dl.nssurge.com/snell/snell-server-${version}-linux-aarch64.zip"
+    else
+        echo "https://dl.nssurge.com/snell/snell-server-${version}-linux-amd64.zip"
+    fi
+}
+
+# 备份 Snell 配置
+backup_snell_config() {
+    local backup_dir="/tmp/snell_backup_$(date +%Y%m%d_%H%M%S)"
+    mkdir -p "$backup_dir"
+    if [ -d "${SNELL_CONF_DIR}" ]; then
+        cp -r "${SNELL_CONF_DIR}" "$backup_dir/"
+    fi
+    if [ -f "${SYSTEMD_SERVICE_FILE}" ]; then
+        cp "${SYSTEMD_SERVICE_FILE}" "$backup_dir/"
+    fi
+    echo "$backup_dir"
+}
+
+# 恢复 Snell 配置
+restore_snell_config() {
+    local backup_dir="$1"
+    if [ -d "$backup_dir/snell" ]; then
+        cp -r "$backup_dir/snell" "${SNELL_CONF_DIR}"
+    fi
+    if [ -f "$backup_dir/snell.service" ]; then
+        cp "$backup_dir/snell.service" "${SYSTEMD_SERVICE_FILE}"
+    fi
+    systemctl daemon-reload
+}
+
+# 只更新 Snell 二进制文件，不覆盖配置
+update_snell_binary() {
+    echo -e "${CYAN}=============== Snell 更新 ===============${RESET}"
+    echo -e "${YELLOW}注意：这是更新操作，不是重新安装${RESET}"
+    echo -e "${GREEN}✓ 所有现有配置将被保留${RESET}"
+    echo -e "${GREEN}✓ 端口、密码、用户配置都不会改变${RESET}"
+    echo -e "${GREEN}✓ 服务会自动重启${RESET}"
+    echo -e "${CYAN}============================================${RESET}"
+    
+    echo -e "${CYAN}正在备份当前配置...${RESET}"
+    local backup_dir
+    backup_dir=$(backup_snell_config)
+    echo -e "${GREEN}配置已备份到: $backup_dir${RESET}"
+
+    echo -e "${CYAN}正在更新 Snell 二进制文件...${RESET}"
+    
+    # 获取最新版本信息（版本已在 check_snell_update 中确定）
+    get_latest_snell_version
+    ARCH=$(uname -m)
+    SNELL_URL=$(get_snell_download_url "$SNELL_VERSION_CHOICE")
+
+    echo -e "${CYAN}正在下载 Snell ${SNELL_VERSION_CHOICE} (${SNELL_VERSION})...${RESET}"
+    
+    # 确保 wget 和 unzip 已安装
+    if ! command -v wget &> /dev/null || ! command -v unzip &> /dev/null; then
+        wait_for_apt
+        apt update && apt install -y wget unzip
+    fi
+    
+    # v4 和 v5 版本都使用 zip 格式，统一处理
+    wget ${SNELL_URL} -O snell-server.zip
+    if [ $? -ne 0 ]; then
+        echo -e "${RED}下载 Snell ${SNELL_VERSION_CHOICE} 失败。${RESET}"
+        restore_snell_config "$backup_dir"
+        exit 1
+    fi
+
+    echo -e "${CYAN}正在替换 Snell 二进制文件...${RESET}"
+    unzip -o snell-server.zip -d ${INSTALL_DIR}
+    if [ $? -ne 0 ]; then
+        echo -e "${RED}解压缩 Snell 失败。${RESET}"
+        restore_snell_config "$backup_dir"
+        exit 1
+    fi
+
+    rm snell-server.zip
+    chmod +x ${INSTALL_DIR}/snell-server
+
+    echo -e "${CYAN}正在重启 Snell 服务...${RESET}"
+    # 重启主服务
+    systemctl restart snell
+    if [ $? -ne 0 ]; then
+        echo -e "${RED}主服务重启失败，尝试恢复配置...${RESET}"
+        restore_snell_config "$backup_dir"
+        systemctl restart snell
+    fi
+
+    # 重启所有多用户服务
+    if [ -d "${SNELL_CONF_DIR}/users" ]; then
+        for user_conf in "${SNELL_CONF_DIR}/users"/*; do
+            if [ -f "$user_conf" ] && [[ "$user_conf" != *"snell-main.conf" ]]; then
+                local port=$(grep -E '^listen' "$user_conf" | sed -n 's/.*::0:\([0-9]*\)/\1/p')
+                if [ ! -z "$port" ]; then
+                    systemctl restart "snell-${port}" 2>/dev/null
+                fi
+            fi
+        done
+    fi
+    
+    echo -e "${CYAN}============================================${RESET}"
+    echo -e "${GREEN}✅ Snell 更新完成！${RESET}"
+    echo -e "${GREEN}✓ 版本已更新到: ${SNELL_VERSION_CHOICE} (${SNELL_VERSION})${RESET}"
+    echo -e "${GREEN}✓ 所有配置已保留${RESET}"
+    echo -e "${GREEN}✓ 服务已重启${RESET}"
+    echo -e "${YELLOW}配置备份目录: $backup_dir${RESET}"
+    echo -e "${CYAN}============================================${RESET}"
+}
+
 # 检查 Snell 更新
 check_snell_update() {
     get_latest_snell_version
@@ -660,7 +821,8 @@ check_snell_update() {
         echo -e "${CYAN}是否更新 Snell? [y/N]${RESET}"
         read -r choice
         if [[ "$choice" == "y" || "$choice" == "Y" ]]; then
-            install_snell
+            SNELL_VERSION_CHOICE="${SNELL_VERSION}"
+            update_snell_binary
         else
             echo -e "${CYAN}已取消更新。${RESET}"
         fi
@@ -668,6 +830,7 @@ check_snell_update() {
         echo -e "${GREEN}当前已是最新版本 (${CURRENT_VERSION})。${RESET}"
     fi
 }
+
 
 # 更新脚本
 update_script() {
