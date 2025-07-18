@@ -98,7 +98,7 @@ check_snell_installed() {
 
 # 获取 Snell 最新版本
 get_latest_snell_version() {
-    latest_version=$(curl -s https://manual.nssurge.com/others/snell.html | grep -oP 'snell-server-v\K[0-9]+\.[0-9]+\.[0-9]+' | head -n 1)
+    latest_version=$(curl -s https://kb.nssurge.com/surge-knowledge-base/zh/release-notes/snell | grep -oP 'snell-server-v\K[0-9]+\.[0-9]+\.[0-9]+' | head -n 1)
     if [ -n "$latest_version" ]; then
         SNELL_VERSION="v${latest_version}"
     else
